@@ -24,6 +24,31 @@ class Layer:
         return self.weights, self.biases
 
 
+class BuildNetwork:
+    def __init__(self, network:list, num_layers:int=1):
+        self.network = network
+        self.num_layers = num_layers
+    
+    def all_weights_biases(self):
+        self.weights_biases = []
+        self.activation = []
+        biases = []
+        for layer in self.network:
+            if type(layer) == Layer:
+                w, b = layer.parameters()
+                self.weights_biases.append(w)
+                biases.append(b)
+        
+        self.weights_biases.extend(biases)
+    
+    def forwardFeed(self, input):
+        self.all_weights_biases()
+
+        pass
+
+
+
+
 class Network:
     def __init__(self, nodes:list, activations:list, bias:bool=True):
         """
@@ -81,3 +106,7 @@ class Network:
 
     def forwardFeed(self):
         pass
+
+
+class Layer:
+    def __init__(self, activation, hidden_size:int, weight_init:str="random", bias:bool=True)
