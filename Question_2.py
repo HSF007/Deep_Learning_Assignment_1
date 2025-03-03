@@ -3,7 +3,25 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-
+class Layer:
+    def __init__(self, in_feature, out_feature, weight_init:str="random", bias:bool=True):
+        self.in_feature = in_feature
+        self.out_feature = out_feature
+        self.bias = bias
+        self.weight_init = weight_init
+    
+    def parameters(self):
+        self.biases = None
+        if self.weight_init == "Xavier":
+            interval = np.sqrt(6/(self.feature_in + self.feature_out))
+            self.weights = np.random.uniform(-interval, interval, size=(self.in_feature, self.out_feature))
+            if self.bias:
+                 self.biases = np.random.uniform(-interval, interval, (1, self.out_feature))
+        else:
+            self.weights = np.random.Generator.standard_normal(size=(self.in_feature, self.out_feature))
+            if self.bias:
+                 self.biases = np.random.Generator.standard_normal(size=(1, self.out_feature))
+        return self.weights, self.biases
 
 
 class Network:
@@ -62,16 +80,4 @@ class Network:
 
 
     def forwardFeed(self):
-
-
-
-
-class Layer:
-    def __init__(self, value_in, value_out, bias:bool=True):
-        self.value_in = value_in
-        self.value_out = value_out
-        self.bias = bias
-        self.weights = np.random.Generator.standard_normal(size=(value_out, value_in))
-
-class Network:
-    def __init__(self, )
+        pass
