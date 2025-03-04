@@ -89,3 +89,6 @@ class NeuralNetwork:
         
         self.y_hat = self.hidden_values.pop()
         return self.active_values, self.hidden_values, self.y_hat
+    
+    def backProp(self, X, y):
+        pass

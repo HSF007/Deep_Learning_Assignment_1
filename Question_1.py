@@ -6,8 +6,7 @@ import matplotlib.pyplot as plt
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 
-from tensorflow import keras
-from tensorflow.keras.datasets import fashion_mnist
+from tensorflow.keras.datasets import fashion_mnist #type:ignore
 
 
 classes = ["T-shirt/top", "Trouser", "Pullover", "Dress", "Coat", "Sandal", "Shirt", "Sneaker", "Bag", "Ankle boot"]
@@ -16,7 +15,6 @@ classes = ["T-shirt/top", "Trouser", "Pullover", "Dress", "Coat", "Sandal", "Shi
 
 fig, axs = plt.subplots(2,5)
 
-row = 0
 for i, ax in zip(range(10), axs.flat):
     ax.axis('off')
     ax.imshow(X_train[np.where(y_train == i)[0][0]], cmap='gray')
