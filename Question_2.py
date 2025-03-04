@@ -1,6 +1,4 @@
-import os
 import numpy as np
-import matplotlib.pyplot as plt
 
 
 class Layer:
@@ -12,101 +10,82 @@ class Layer:
     
     def parameters(self):
         self.biases = None
-        if self.weight_init == "Xavier":
-            interval = np.sqrt(6/(self.feature_in + self.feature_out))
-            self.weights = np.random.uniform(-interval, interval, size=(self.in_feature, self.out_feature))
+        if self.weight_init.lower() == "xavier":
+            interval = np.sqrt(6/(self.in_feature + self.out_feature))
+            self.weights = np.random.uniform(-interval, interval, size=(self.out_feature, self.in_feature))
             if self.bias:
-                 self.biases = np.random.uniform(-interval, interval, (1, self.out_feature))
+                self.biases = np.random.uniform(-interval, interval, (self.out_feature, 1))
         else:
-            self.weights = np.random.Generator.standard_normal(size=(self.in_feature, self.out_feature))
+            self.weights = np.random.Generator.standard_normal(size=(self.out_feature, self.in_feature))
             if self.bias:
-                 self.biases = np.random.Generator.standard_normal(size=(1, self.out_feature))
+                self.biases = np.random.Generator.standard_normal(size=(self.out_feature, 1))
         return self.weights, self.biases
-
-
-class BuildNetwork:
-    def __init__(self, network:list, num_layers:int=1):
-        self.network = network
-        self.num_layers = num_layers
     
-    def all_weights_biases(self):
-        self.weights_biases = []
-        self.activation = []
-        biases = []
-        for layer in self.network:
-            if type(layer) == Layer:
-                w, b = layer.parameters()
-                self.weights_biases.append(w)
-                biases.append(b)
-        
-        self.weights_biases.extend(biases)
+    def sigmoid(self, z, feed:bool=True):
+        val = 1/(1 + np.exp(-z))
+        if feed:
+            return val
+        else:
+            return val*(1 - val)
     
-    def forwardFeed(self, input):
-        self.all_weights_biases()
+    def identity(self, z, feed:bool=True):
+        if feed:
+            return z
+        else:
+            return np.ones(shape=z.shape)
+    
+    def tanh(self, z, feed:bool=True):
+        val = np.tanh(z)
+        if feed:
+            return val
+        else:
+            return 1 - val*val
+    
+    def ReLu(self, z, feed:bool=True):
+        if feed:
+            return max(0, z)
+        else:
+            return 1 if z > 0 else 0
 
-        pass
 
 
-
-
-class Network:
-    def __init__(self, nodes:list, activations:list, bias:bool=True):
-        """
-        Attributes
-        ----------
-        nodes : list
-            list of number of nodes in each layer
-            Example: A network contains input=100, hidden_1=200, hidden_2=200 and output=10
-            then nodes = [100, 200, 200, 10]
-        
-        activations : list
-            List of activation functions for hidden and output layer.
-        
-        bias : bool
-            True if network contains bias else False
-        """
-
-        self.nodes = nodes
-        self.activations = activations
+class NeuralNetwork:
+    def __init__(self, input_features:int, hidden_layers:list, activations:list[str], output_layer:int=10, weight_init:str="random", bias:bool=True):
+        self.input_features = input_features
+        self.hidden_layers = hidden_layers
+        self.output_layer = output_layer
         self.bias = bias
-    
-    def layer(self, in_feature:int, out_feature:int, bias:bool=True):
-        biases = None
-        interval = np.sqrt(6 / (in_feature + out_feature))
-        weights = np.random.uniform(-interval, interval, (in_feature, out_feature))
-        if bias:
-            biases = np.random.uniform(-interval, interval, (1, out_feature))
-        return weights, biases
-    
-
-
-    def parameters(self):
-        """Initializes weights and biases."""
-
-        self.weights_biases = []
-        for i in range(len(self.nodes) - 1):
-            shape = (self.nodes[i], self.nodes[i+1])
-            if i and self.activations[i-1]=="relu":
-                std = np.sqrt(2 / shape[0])
-                self.weights_biases.append(np.random.normal(0, std, shape))
-                if self.bias:
-                    self.weights_biases.append(np.random.normal(0, std, (1, shape[1])))
-            
-            elif i and (self.activations[i-1] == "sigmoid" or self.activations[i-1] == "tanh"):
-                interval = np.sqrt(6 / (shape[0] + shape[1]))
-                self.weights_biases.append(np.random.uniform(-interval, interval, shape))
-                if self.bias:
-                    self.weights_biases.append(np.random.uniform(-interval, interval, (1, shape[1])))
-            
+        self.weight_init = weight_init
+        self.activations = []
+        self.weights = []
+        self.biases = []
+        for i in range(2+len(self.hidden_layers)):
+            if not i:
+                weight, bias = Layer(in_feature=self.input_features, out_feature=self.hidden_layers[0],
+                                     weight_init=self.weight_init, bias=self.bias).parameters()
+                self.weights.append(weight)
+                self.biases.append(bias)
+        
+        for i in activations:
+            if i.lower() == "identity":
+                self.activations.append(Layer.identity())
+            elif i.lower() == "sigmoid":
+                self.activations.append(Layer.sigmoid())
+            elif i.lower() == "tanh":
+                self.activations.append(Layer.tanh())
+            elif i.lower() == "relu":
+                self.activations.append(Layer.ReLu())
             else:
-                self.weights_biases.append(np.random.uniform(-0.01, 0.01, shape))
-                if self.bias:
-                    self.weights_biases.append(np.random.uniform(-0.01, 0.01, (1, shape[1])))
+                raise NameError(f"Error: No such activation as {i}.\nYou can choose activation fucntions from [identity, sigmoid, tanh, ReLU].")
+        
+    def feedforward(self, data):
+        self.active_values = []
+        self.hidden_values = []
 
-
-    def forwardFeed(self):
-        pass
-
-
-class Layer:
-    def __init__(self, activation, hidden_size:int, weight_init:str="random", bias:bool=True)
+        for i, j, a in zip(self.weights, self.biases, self.activations):
+            z = i@data + j
+            self.active_values.append(z)
+            self.hidden_values.append(self.activations(z))
+        
+        self.y_hat = self.hidden_values.pop()
+        return self.active_values, self.hidden_values, self.y_hat
