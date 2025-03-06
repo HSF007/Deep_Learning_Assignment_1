@@ -1,2 +1,3 @@
-def backProp(X, y):
-    pass
+class SGD:
+    def __init__(self):
+        pass
