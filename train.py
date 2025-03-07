@@ -8,52 +8,33 @@ from Question_2 import NeuralNetwork
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
+def datatype_check(value):
+    try:
+        return int(value)
+    except ValueError:
+        return str(value)
+
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description='Neural Network Training Script')
-    
-    # All arguments as specified in the assignment
-    parser.add_argument('-wp', '--wandb_project', default='myprojectname', 
-                        help='Project name for Weights & Biases')
-    parser.add_argument('-we', '--wandb_entity', default='myname', 
-                        help='Wandb Entity')
-    parser.add_argument('-d', '--dataset', choices=['mnist', 'fashion_mnist'], 
-                        default='fashion_mnist', help='Dataset to use')
-    parser.add_argument('-e', '--epochs', type=int, default=1, 
-                        help='Number of epochs to train')
-    parser.add_argument('-b', '--batch_size', type=int, default=4, 
-                        help='Batch size for training')
-    parser.add_argument('-l', '--loss', choices=['mean_squared_error', 'cross_entropy'], 
-                        default='cross_entropy', help='Loss function')
-    parser.add_argument('-o', '--optimizer', 
-                        choices=['sgd', 'momentum', 'nag', 'rmsprop', 'adam', 'nadam'], 
-                        default='sgd', help='Optimization algorithm')
-    parser.add_argument('-lr', '--learning_rate', type=float, default=0.1, 
-                        help='Learning rate')
-    parser.add_argument('-m', '--momentum', type=float, default=0.5, 
-                        help='Momentum for momentum and NAG optimizers')
-    parser.add_argument('-beta', '--beta', type=float, default=0.5, 
-                        help='Beta for RMSprop')
-    parser.add_argument('-beta1', '--beta1', type=float, default=0.5, 
-                        help='Beta1 for Adam and Nadam')
-    parser.add_argument('-beta2', '--beta2', type=float, default=0.5, 
-                        help='Beta2 for Adam and Nadam')
-    parser.add_argument('-eps', '--epsilon', type=float, default=1e-6, 
-                        help='Epsilon for optimizers')
-    parser.add_argument('-w_d', '--weight_decay', type=float, default=0.0, 
-                        help='Weight decay for regularization')
-    parser.add_argument('-w_i', '--weight_init', choices=['random', 'Xavier'], 
-                        default='random', help='Weight initialization method')
-    parser.add_argument('-nhl', '--num_layers', type=int, default=1, 
-                        help='Number of hidden layers')
-    parser.add_argument('-sz', '--hidden_size', type=int, default=4, 
-                        help='Number of neurons in hidden layers')
-    parser.add_argument('-a', '--activation', 
-                        choices=['identity', 'sigmoid', 'tanh', 'ReLU'], 
-                        default='ReLU', help='Activation function')
-    
-
-
+    parser = argparse.ArgumentParser(description='Deep Learning Assignment-01')
+    parser.add_argument('-wp', '--wandb_project', default='myprojectname')
+    parser.add_argument('-we', '--wandb_entity', default='myname')
+    parser.add_argument('-d', '--dataset', choices=['mnist', 'fashion_mnist'], default='fashion_mnist')
+    parser.add_argument('-e', '--epochs', type=int, default=1,)
+    parser.add_argument('-b', '--batch_size', type=int, default=4)
+    parser.add_argument('-l', '--loss', choices=['mean_squared_error', 'cross_entropy'], default='cross_entropy')
+    parser.add_argument('-o', '--optimizer', choices=['sgd', 'momentum', 'nag', 'rmsprop', 'adam', 'nadam'], default='sgd')
+    parser.add_argument('-lr', '--learning_rate', type=float, default=0.1)
+    parser.add_argument('-m', '--momentum', type=float, default=0.5)
+    parser.add_argument('-beta', '--beta', type=float, default=0.5)
+    parser.add_argument('-beta1', '--beta1', type=float, default=0.5)
+    parser.add_argument('-beta2', '--beta2', type=float, default=0.5)
+    parser.add_argument('-eps', '--epsilon', type=float, default=1e-6)
+    parser.add_argument('-w_d', '--weight_decay', type=float, default=0.0)
+    parser.add_argument('-w_i', '--weight_init', choices=['random', 'Xavier'], default='random')
+    parser.add_argument('-nhl', '--num_layers', type=int, default=1)
+    parser.add_argument('-sz', '--hidden_size', type=datatype_check, default=4)
+    parser.add_argument('-a', '--activation', choices=['identity', 'sigmoid', 'tanh', 'ReLU'], default='ReLU')
 
 args = parse_arguments()
     
