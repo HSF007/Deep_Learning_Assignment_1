@@ -32,6 +32,9 @@ class NeuralNetwork:
             self.weights.append(w)
             self.biases.append(b)
         
+        self.weights = np.array(self.weights)
+        self.biases = np.array(self.biases)
+        
     def get_activation(self, activation):
         if activation.lower() == "identity":
             return lambda x: x
@@ -72,6 +75,8 @@ class NeuralNetwork:
             
             self.active_values.append(data)
         
+        self.hidden_values = np.array(self.hidden_values)
+        self.active_values = np.array(self.active_values)
         
         return self.hidden_values, self.active_values
     
@@ -110,15 +115,17 @@ class NeuralNetwork:
             dW = np.dot(da_k, self.active_values[i].T)/m
             db = np.mean(da_k, axis=1, keepdims=True)
 
-            dh_k = self.weights.T @ da_k
+            dh_k = self.weights[i].T @ da_k
             da_k = np.multiply(dh_k, self.activation_derivative(self.hidden_values[i]))
+
             weights_grad.append(dW)
             biases_grad.append(db)
-        self.history_grad.append((weights_grad, biases_grad))
-        return weights_grad, biases_grad
+        
+        self.history_grad.append((np.array(weights_grad), np.array(biases_grad)))
+        return np.array(weights_grad), np.array(biases_grad)
     
     def train(self, X_train, y_train, X_val, y_val, epochs=1, batch_size=32,
-              learning_rate=0.1, optimizer="sgd", loss_type='cross_entropy', weight_decay=0, beta=0.5):
+              learning_rate=0.1, optimizer="sgd", loss_type='cross_entropy', beta=0.5, weight_decay=0, eps=1e-6):
         if optimizer.lower() == "sgd":
             opt = SGD(learning_rate)
         
@@ -126,12 +133,12 @@ class NeuralNetwork:
             opt = Momentum(learning_rate, beta)
         
         elif optimizer.lower() == 'nag':
-            opt = NAG(learning_rate, beta)
+            opt = NAG(eta=learning_rate, beta=beta)
             prev_vw = np.zeros_like(self.weights)
             prev_vb = np.zeros_like(self.biases)
         
         elif optimizer.lower() == 'rmsprop':
-            opt = RMSProp()
+            opt = RMSProp(eta=learning_rate, beta=beta, eps=eps)
         
         elif optimizer.lower() == 'adam':
             opt = adam(learning_rate)
@@ -145,9 +152,10 @@ class NeuralNetwork:
         train_loss, val_loss = [], []
         train_acc, val_acc = [], []
 
-        for _ in range(epochs):
+        for epoch in range(epochs):
             loss, acc = 0, 0
             for i in range(0, X_train, batch_size):
+                count = 0
                 X_batch = X_train[i:i+batch_size]
                 y_batch = y_train[i:i+batch_size]
 
