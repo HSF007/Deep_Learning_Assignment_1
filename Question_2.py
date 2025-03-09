@@ -23,17 +23,17 @@ class NeuralNetwork:
         for i in range(len(layer_sizes) - 1):
             if self.weight_init.lower() == "xavier":
                 interval = np.sqrt(6/((layer_sizes[i] + layer_sizes[i+1])))
-                w = np.random.uniform(-interval, interval, size=(layer_sizes[i+1], layer_sizes[i]))
-                b = np.random.uniform(-interval, interval, (layer_sizes[i+1], 1))
+                w = np.random.uniform(-interval, interval, size=(layer_sizes[i], layer_sizes[i+1]))
+                b = np.random.uniform(-interval, interval, (1, layer_sizes[i+1]))
             else:
-                w = np.random.Generator.standard_normal(size=(layer_sizes[i+1], layer_sizes[i]))
-                b = np.random.Generator.standard_normal(size=(layer_sizes[i+1], 1))
+                w = np.random.Generator.standard_normal(size=(layer_sizes[i], layer_sizes[i+1]))
+                b = np.random.Generator.standard_normal(size=(1, layer_sizes[i+1]))
             
             self.weights.append(w)
             self.biases.append(b)
         
-        self.weights = np.array(self.weights)
-        self.biases = np.array(self.biases)
+        self.weights = self.weights
+        self.biases = self.biases
         
     def get_activation(self, activation):
         if activation.lower() == "identity":
@@ -60,121 +60,110 @@ class NeuralNetwork:
             raise NameError(f"Error: No such activation as {activation}.\nYou can choose activation fucntions from [identity, sigmoid, tanh, ReLU].")
         
     def feedforward(self, X):
-        self.active_values = [X.T]
+        self.active_values = [X]
         self.hidden_values = []
 
-        for index, param in enumerate(zip(self.weights, self.biases)):
-            z = param[0]@self.active_values[-1] + param[1]
+        for i in range(len(self.weights) - 1):
+            z = np.dot(self.active_values[-1], self.weights[i]) + self.biases[i]
             self.hidden_values.append(z)
-            if index != len(self.weights) - 1:
-                data = self.activation(z)
-            else:
-                # Appling Softmax at last layer
-                exp_y_hat = np.exp(z - np.max(z))
-                data = exp_y_hat / np.sum(exp_y_hat)
-            
+            data = self.activation(z)
             self.active_values.append(data)
+
+        z = np.dot(self.active_values[-1], self.weights[-1]) + self.biases[-1]
+        self.hidden_values.append(z)
+        # Appling Softmax at last layer
+        exp_y_hat = np.exp(z - np.max(z, axis=1, keepdims=True))
+        data = exp_y_hat / np.sum(exp_y_hat, axis=1, keepdims=True)
+
+        self.active_values.append(data)
         
-        self.hidden_values = np.array(self.hidden_values)
-        self.active_values = np.array(self.active_values)
+        self.hidden_values = self.hidden_values
+        self.active_values = self.active_values
         
         return self.hidden_values, self.active_values
     
     def compute_loss(self, y_pred, y_true, loss_type='cross_entropy', weight_decay=0):
         if loss_type == 'cross_entropy':
-            epsilon = 1e-15 # To avoid log(0)
-            y_pred = np.clip(y_pred, epsilon, 1 - epsilon)
-            loss = -np.sum(y_true * np.log(y_pred)).mean()
+            loss = -np.mean(np.sum(y_true * np.log(y_pred + 1e-15), axis=1))
         else:
             loss = 0.5 * np.mean(np.square(y_pred - y_true))
         
         if weight_decay > 0:
             reg_loss = sum(np.sum(np.square(W)) for W in self.weights)
             loss += 0.5 * weight_decay * reg_loss
-        
         return loss
     
     def accuracy(self, y_true, y_pred):
         return np.mean(y_true == np.argmax(y_pred, axis=0))
     
-    def backProp(self, X, y, loss="cross_entropy"):
+    def predict(self, X):
+        _, y_pred = self.feedforward(X)
+        return np.argmax(y_pred[-1], axis=0)
+    
+    def backProp(self, X, y, loss_type="cross_entropy", weight_decay=0):
         m = X.shape[0]
-        y_one_hot = np.eye(self.output_features)[y].T
 
         # compute ouput layer gradient
-        if loss == "cross_entropy":
-            da_k = self.active_values[-1] - y_one_hot
+        if loss_type == "cross_entropy":
+            da_k = self.active_values[-1] - y
         else:
-            pass
+            da_k = (self.active_values[-1] - y)*self.active_values*(1 - self.active_values)
         
-        weights_grad = []
-        biases_grad = []
+        weights_grad = [None]*(len(self.weights))
+        biases_grad = [None]*(len(self.weights))
+        
+        weights_grad[-1] = (1/m) * np.dot(self.active_values[-2].T, da_k)
+        biases_grad[-1] = (1/m) * np.sum(da_k, axis=0, keepdims=True)
+
+        if weight_decay > 0:
+            weights_grad[-1] += weight_decay * self.weights[-1]
 
         # Gradients for Hidden Layer
-        for i in reversed(range(len(self.weights))):
-            dW = np.dot(da_k, self.active_values[i].T)/m
-            db = np.mean(da_k, axis=1, keepdims=True)
 
-            dh_k = self.weights[i].T @ da_k
-            da_k = np.multiply(dh_k, self.activation_derivative(self.hidden_values[i]))
+        for i in range((len(self.weights)) - 2, -1, -1):
+            da_k = np.dot(da_k, self.weights[i+1].T) * self.activation_derivative(self.active_values[i+1])
+            weights_grad[i] = (1/m) * np.dot(self.active_values[i].T, da_k)
+            biases_grad[i] = (1/m) * np.sum(da_k, axis=0, keepdims=True)
 
-            weights_grad.append(dW)
-            biases_grad.append(db)
+            if weight_decay > 0:
+                weights_grad[i] += weight_decay * self.weights[i]
         
-        self.history_grad.append((np.array(weights_grad), np.array(biases_grad)))
-        return np.array(weights_grad), np.array(biases_grad)
+        self.history_grad.append((weights_grad, biases_grad))
+        return weights_grad, biases_grad
     
-    def train(self, X_train, y_train, X_val, y_val, epochs=1, batch_size=32,
-              learning_rate=0.1, optimizer="sgd", loss_type='cross_entropy', beta=0.5, weight_decay=0, eps=1e-6):
-        if optimizer.lower() == "sgd":
-            opt = SGD(learning_rate)
+    def train(self, X_train, y_train, X_val, y_val, optimizer, epochs=1,
+              batch_size=32, loss_type='cross_entropy', beta=0.5, weight_decay=0, nag=False):
         
-        elif optimizer.lower() == 'momentum':
-            opt = Momentum(learning_rate, beta)
-        
-        elif optimizer.lower() == 'nag':
-            opt = NAG(eta=learning_rate, beta=beta)
-            prev_vw = np.zeros_like(self.weights)
-            prev_vb = np.zeros_like(self.biases)
-        
-        elif optimizer.lower() == 'rmsprop':
-            opt = RMSProp(eta=learning_rate, beta=beta, eps=eps)
-        
-        elif optimizer.lower() == 'adam':
-            opt = adam(learning_rate)
-        
-        elif optimizer.lower() == 'nadam':
-            opt = Nadam(learning_rate)
-        
-        else:
-            raise NameError(f"Error: No such optimizer as {optimizer}.\nYou can choose optimizer from [sgd, momentum, nag, rmsprop, adam, nadam].")
+        if nag:
+            prev_vw = [np.zeros_like(w) for w in self.weights]
+            prev_vb = [np.zeros_like(w) for w in self.biases]
         
         train_loss, val_loss = [], []
         train_acc, val_acc = [], []
 
-        for epoch in range(epochs):
+        for _ in range(epochs):
             loss, acc = 0, 0
-            for i in range(0, X_train, batch_size):
-                count = 0
+            for i in range(0, len(X_train), batch_size):
                 X_batch = X_train[i:i+batch_size]
                 y_batch = y_train[i:i+batch_size]
 
-                if optimizer.lower() == 'nag':
-                    self.weights -= beta*prev_vw
-                    self.biases -= beta*prev_vb
+                if nag:
+                    for i in range(len(self.weights)):
+                        self.weights[i] -= beta*prev_vw[i]
+                        self.biases[i] -= beta*prev_vb[i]
                 
                 _, active_values = self.feedforward(X_batch)
 
                 loss += self.compute_loss(active_values[-1], y_batch, loss_type, weight_decay)
 
-                accu += self.accuracy(y_batch, active_values[-1])
+                acc += self.accuracy(y_batch, active_values[-1])
 
                 weights_grad, biases_grad = self.backProp(X_batch, y_batch, loss_type=loss_type)
 
-                if optimizer.lower() == 'nag':
-                    self.weights, self.biases, prev_vw, prev_vb = opt.do_update(self.weights, self.biases, prev_vw, prev_vb, weights_grad, biases_grad)
+                if nag:
+                    self.weights, self.biases, prev_vw, prev_vb = optimizer.do_update(self.weights, self.biases, prev_vw, prev_vb, weights_grad, biases_grad)
                 else:
-                    self.weights, self.biases = opt.do_update(self.weights, self.biases, weights_grad, biases_grad)
+                    self.weights, self.biases = optimizer.do_update(self.weights, self.biases, weights_grad, biases_grad)
             
             train_loss.append(loss/batch_size)
             train_acc.append(acc/batch_size)
@@ -182,11 +171,11 @@ class NeuralNetwork:
             _, val_pred = self.feedforward(X_val)
             val_loss.append(self.compute_loss(val_pred[-1], y_val, loss_type, weight_decay))
             val_acc.append(self.accuracy(y_val, val_pred[-1]))
-        
-        wandb.log({
-                'train_loss': train_loss,
-                'val_loss': val_loss,
-                'train_accuracy': train_acc,
-                'val_accuracy': val_acc
-            })
+
+        return train_loss, val_loss, train_acc, val_acc
+    
+    def test(self, X_test, y_test, loss_type='cross_entropy', weight_decay=0):
+        _, y_pred = self.feedforward(X_test)
+        acc = self.accuracy(y_test, y_pred[-1])
+        return acc
 

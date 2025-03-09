@@ -5,8 +5,9 @@ class SGD:
         self.eta = eta
         
     def do_update(self, weights, biases, weight_grad, bias_grad):
-        weights -= self.eta * weight_grad
-        biases -= self.eta * bias_grad.reshape(biases.shape)
+        for i in range(len(weights)):
+            weights[i] -= self.eta * weight_grad[i]
+            biases[i] -= self.eta * bias_grad[i]
         return weights, biases
 
 class Momentum:
@@ -16,16 +17,17 @@ class Momentum:
         self.prev_uw, self.prev_ub = None, None
     
     def do_update(self, weights, biases, weight_grad, bias_grad):
-        if not self.prev_uw:
-            self.prev_uw = np.zeros_like(weights)
-        if not self.prev_ub:
-            self.prev_ub = np.zeros_like(biases)
+        if self.prev_uw is None:
+            self.prev_uw = [np.zeros_like(w) for w in weights]
+        if self.prev_ub is None:
+            self.prev_ub = [np.zeros_like(b) for b in biases]
         
-        self.prev_uw = self.beta * self.prev_uw + self.eta * weight_grad
-        self.prev_ub = self.beta * self.prev_ub + self.eta * bias_grad.reshape(biases.shape)
+        for i in range(len(weights)):
+            self.prev_uw[i] = self.beta * self.prev_uw[i] + self.eta * weight_grad[i]
+            self.prev_ub[i] = self.beta * self.prev_ub[i] + self.eta * bias_grad[i]
 
-        weights -= self.prev_uw
-        biases -= self.prev_ub
+            weights[i] -= self.prev_uw[i]
+            biases[i] -= self.prev_ub[i]
 
         return weights, biases
 
@@ -36,11 +38,12 @@ class NAG:
     
     def do_update(self, weights, biases, prev_vw, prev_vb, dw, db):
 
-        prev_vw = self.beta*prev_vw + self.eta*dw
-        prev_vb = self.beta*prev_vb + self.eta*db.reshape(biases.shape)
+        for i in range(len(weights)):
+            prev_vw[i] = self.beta*prev_vw[i] + self.eta*dw[i]
+            prev_vb[i] = self.beta*prev_vb[i] + self.eta*db[i]
         
-        weights -= prev_vw 
-        biases -= prev_vb
+            weights[i] -= prev_vw[i] 
+            biases[i] -= prev_vb[i]
         return weights, biases, prev_vw, prev_vb
 
 class RMSProp:
@@ -52,16 +55,17 @@ class RMSProp:
         self.beta = beta
     
     def do_update(self, weights, biases, dw, db):
-        if not self.vw:
-            self.vw = np.zeros_like(weights)
-        if not self.vb:
-            self.vb = np.zeros_like(biases)
+        if self.vw is None:
+            self.vw = [np.zeros_like(w) for w in weights]
+        if self.vb is None:
+            self.vb = [np.zeros_like(b) for b in biases]
         
-        vw = self.beta*self.vw + (1 - self.beta)*(np.square(dw))
-        vb = self.beta*self.vb + (1 - self.beta)*(np.square(db.reshape(biases.shape)))
+        for i in range(len(weights)):
+            self.vw[i] = self.beta*self.vw[i] + (1 - self.beta)*(np.square(dw[i]))
+            self.vb[i] = self.beta*self.vb[i] + (1 - self.beta)*(np.square(db[i]))
 
-        weights -= self.eta*dw/(np.sqrt(vw) + self.eps)
-        biases -= self.eta*db/(np.sqrt(vb) + self.eps)
+            weights[i] -= self.eta*dw[i]/(np.sqrt(self.vw[i]) + self.eps)
+            biases[i] -= self.eta*db[i]/(np.sqrt(self.vb[i]) + self.eps)
 
         return weights, biases
 
@@ -78,22 +82,26 @@ class adam:
         self.t = 0
     
     def do_update(self, weights, biases, dw, db):
-        if not self.mw:
-            self.mw = np.zeros_like(weights)
-            self.vw = np.zeros_like(weights)
-            self.mb = np.zeros_like(biases)
-            self.vb = np.zeros_like(biases)
+        if self.mw is None:
+            self.mw = [np.zeros_like(w) for w in weights]
+            self.vw = [np.zeros_like(w) for w in weights]
+            self.mb = [np.zeros_like(b) for b in biases]
+            self.vb = [np.zeros_like(b) for b in biases]
         
-        self.mw = self.beta1*self.mw + (1 - self.beta1)*dw
-        self.vw = self.beta2*self.vw + (1 - self.beta2)*(np.square(dw))
-
-        self.mb = self.beta1*self.mb + (1 - self.beta1)*db.reshape(biases.shape)
-        self.vb = self.beta2*self.vb + (1- self.beta2)*(np.square(db.reshape(biases.shape)))
-
         self.t += 1
+        
+        for i in range(len(weights)): 
+            self.mw[i] = self.beta1*self.mw[i] + (1 - self.beta1)*dw[i]
+            self.vw[i] = self.beta2*self.vw[i] + (1 - self.beta2)*(np.square(dw[i]))
 
-        weights -= self.eta*self.mw/((np.sqrt(self.vw/(1-np.power(self.beta2, self.t))) + self.eps)*(1- np.power(self.beta1, self.t)))
-        biases -= self.eta*self.mb/((np.sqrt(self.vb/(1-np.power(self.beta2, self.t))) + self.eps)*(1- np.power(self.beta1, self.t)))
+            self.mb[i] = self.beta1*self.mb[i] + (1 - self.beta1)*db[i]
+            self.vb[i] = self.beta2*self.vb[i] + (1- self.beta2)*(np.square(db[i]))
+
+            biase_correction1 = 1 - np.power(self.beta1, self.t)
+            biase_correction2 = 1 - np.power(self.beta2, self.t)
+
+            weights[i] -= self.eta*(self.mw[i]/biase_correction1)/(np.sqrt(self.vw[i]/biase_correction2)+ self.eps)
+            biases[i] -= self.eta*(self.mb[i]/biase_correction1)/(np.sqrt(self.vb[i]/biase_correction2) + self.eps)
 
         return weights, biases
 
@@ -109,22 +117,26 @@ class Nadam:
         self.t = 0
 
     def do_update(self, weights, biases, dw, db):
-        if not self.mw:
-            self.mw, self.vw = np.zeros_like(weights), np.zeros_like(weights)
-            self.mb, self.vb = np.zeros_like(biases), np.zeros_like(biases)
-
-        self.mw = self.beta1*self.mw + (1 - self.beta1)*dw
-        self.mb = self.beta1*self.mb + (1 - self.beta1)*db.reshape(biases.shape)
-
-        self.vw = self.beta2*self.vw + (1 - self.beta2)*(np.square(dw))
-        self.vb = self.beta2*self.vb + (1 - self.beta2)*(np.square(db.reshape(biases.shape)))
+        if self.mw is None:
+            self.mw = [np.zeros_like(w) for w in weights]
+            self.vw = [np.zeros_like(w) for w in weights]
+            self.mb = [np.zeros_like(b) for b in biases]
+            self.vb = [np.zeros_like(b) for b in biases]
 
         self.t += 1
 
-        biase_correction1 = 1 - np.power(self.beta1, self.t)
-        biase_correction2 = 1 - np.power(self.beta2, self.t)
+        for i in range(len(weights)):
+            self.mw[i] = self.beta1*self.mw[i] + (1 - self.beta1)*dw[i]
+            self.mb[i] = self.beta1*self.mb[i] + (1 - self.beta1)*db[i]
 
-        weights -= (self.eta/np.sqrt(self.vw/biase_correction2 + self.eps))*(self.beta1*self.mw/biase_correction1 + (1-self.beta1)*dw/biase_correction1)
-        biases -= (self.eta/np.sqrt(self.vb/biase_correction2 + self.eps))*(self.beta1*self.mb/biase_correction1 + (1-self.beta1)*db/biase_correction1)
+            self.vw[i] = self.beta2*self.vw[i] + (1 - self.beta2)*(np.square(dw[i]))
+            self.vb[i] = self.beta2*self.vb[i] + (1 - self.beta2)*(np.square(db[i]))
+
+
+            biase_correction1 = 1 - np.power(self.beta1, self.t)
+            biase_correction2 = 1 - np.power(self.beta2, self.t)
+
+            weights[i] -= (self.eta/np.sqrt(self.vw[i]/biase_correction2 + self.eps))*((self.beta1*self.mw[i]/biase_correction1) + ((1-self.beta1)*dw[i]/biase_correction1))
+            biases[i] -= (self.eta/np.sqrt(self.vb[i]/biase_correction2 + self.eps))*((self.beta1*self.mb[i]/biase_correction1) + ((1-self.beta1)*db[i]/biase_correction1))
 
         return weights, biases
