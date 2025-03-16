@@ -16,7 +16,6 @@ class NeuralNetwork:
 
         self.weights = []
         self.biases = []
-        self.history_grad = []
 
         layer_sizes = [input_features] + hidden_layers + [output_features]
 
@@ -26,8 +25,8 @@ class NeuralNetwork:
                 w = np.random.uniform(-interval, interval, size=(layer_sizes[i], layer_sizes[i+1]))
                 b = np.random.uniform(-interval, interval, (1, layer_sizes[i+1]))
             else:
-                w = np.random.Generator.standard_normal(size=(layer_sizes[i], layer_sizes[i+1]))
-                b = np.random.Generator.standard_normal(size=(1, layer_sizes[i+1]))
+                w = np.random.randn(layer_sizes[i], layer_sizes[i+1]) * 0.01
+                b = np.random.randn(1, layer_sizes[i+1]) * 0.01
             
             self.weights.append(w)
             self.biases.append(b)
@@ -73,7 +72,7 @@ class NeuralNetwork:
         self.hidden_values.append(z)
         # Appling Softmax at last layer
         exp_y_hat = np.exp(z - np.max(z, axis=1, keepdims=True))
-        data = exp_y_hat / np.sum(exp_y_hat, axis=1, keepdims=True)
+        data = exp_y_hat / (np.sum(exp_y_hat, axis=1, keepdims=True) + 1e-15)
 
         self.active_values.append(data)
         
@@ -82,19 +81,15 @@ class NeuralNetwork:
         
         return self.hidden_values, self.active_values
     
-    def compute_loss(self, y_pred, y_true, loss_type='cross_entropy', weight_decay=0):
+    def compute_loss(self, y_pred, y_true, loss_type='cross_entropy'):
         if loss_type == 'cross_entropy':
             loss = -np.mean(np.sum(y_true * np.log(y_pred + 1e-15), axis=1))
         else:
             loss = 0.5 * np.mean(np.square(y_pred - y_true))
-        
-        if weight_decay > 0:
-            reg_loss = sum(np.sum(np.square(W)) for W in self.weights)
-            loss += 0.5 * weight_decay * reg_loss
         return loss
     
     def accuracy(self, y_true, y_pred):
-        return np.mean(y_true == np.argmax(y_pred, axis=0))
+        return np.mean(np.argmax(y_true ,axis=1) == np.argmax(y_pred, axis=1))
     
     def predict(self, X):
         _, y_pred = self.feedforward(X)
@@ -107,7 +102,7 @@ class NeuralNetwork:
         if loss_type == "cross_entropy":
             da_k = self.active_values[-1] - y
         else:
-            da_k = (self.active_values[-1] - y)*self.active_values*(1 - self.active_values)
+            da_k = (self.active_values[-1] - y)*self.active_values[-1]*(1 - self.active_values[-1])
         
         weights_grad = [None]*(len(self.weights))
         biases_grad = [None]*(len(self.weights))
@@ -128,54 +123,10 @@ class NeuralNetwork:
             if weight_decay > 0:
                 weights_grad[i] += weight_decay * self.weights[i]
         
-        self.history_grad.append((weights_grad, biases_grad))
         return weights_grad, biases_grad
     
-    def train(self, X_train, y_train, X_val, y_val, optimizer, epochs=1,
-              batch_size=32, loss_type='cross_entropy', beta=0.5, weight_decay=0, nag=False):
-        
-        if nag:
-            prev_vw = [np.zeros_like(w) for w in self.weights]
-            prev_vb = [np.zeros_like(w) for w in self.biases]
-        
-        train_loss, val_loss = [], []
-        train_acc, val_acc = [], []
-
-        for _ in range(epochs):
-            loss, acc = 0, 0
-            for i in range(0, len(X_train), batch_size):
-                X_batch = X_train[i:i+batch_size]
-                y_batch = y_train[i:i+batch_size]
-
-                if nag:
-                    for i in range(len(self.weights)):
-                        self.weights[i] -= beta*prev_vw[i]
-                        self.biases[i] -= beta*prev_vb[i]
-                
-                _, active_values = self.feedforward(X_batch)
-
-                loss += self.compute_loss(active_values[-1], y_batch, loss_type, weight_decay)
-
-                acc += self.accuracy(y_batch, active_values[-1])
-
-                weights_grad, biases_grad = self.backProp(X_batch, y_batch, loss_type=loss_type)
-
-                if nag:
-                    self.weights, self.biases, prev_vw, prev_vb = optimizer.do_update(self.weights, self.biases, prev_vw, prev_vb, weights_grad, biases_grad)
-                else:
-                    self.weights, self.biases = optimizer.do_update(self.weights, self.biases, weights_grad, biases_grad)
-            
-            train_loss.append(loss/batch_size)
-            train_acc.append(acc/batch_size)
-
-            _, val_pred = self.feedforward(X_val)
-            val_loss.append(self.compute_loss(val_pred[-1], y_val, loss_type, weight_decay))
-            val_acc.append(self.accuracy(y_val, val_pred[-1]))
-
-        return train_loss, val_loss, train_acc, val_acc
-    
-    def test(self, X_test, y_test, loss_type='cross_entropy', weight_decay=0):
+    def test(self, X_test, y_test):
         _, y_pred = self.feedforward(X_test)
         acc = self.accuracy(y_test, y_pred[-1])
-        return acc
+        return acc, y_pred
 

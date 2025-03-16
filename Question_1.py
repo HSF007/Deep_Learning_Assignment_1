@@ -15,6 +15,5 @@ def get_sample_images(X_train, y_train):
         ax.set_title(classes[i])
 
     plt.tight_layout()
-    # plt.show()
-    # plt.savefig('sample_images.png')
-    # wandb.log({'sample_images': wandb.Image('sample_images.png')})
+    plt.savefig('sample_images.png')
+    wandb.log({'sample_images': wandb.Image('sample_images.png')})

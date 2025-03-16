@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 
 
 from Question_3 import *
-from Question_1 import get_sample_images
 from Question_2 import NeuralNetwork
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
@@ -34,20 +33,10 @@ def parse_arguments():
     parser.add_argument('-sz', '--hidden_size', type=str, default=4, 
                         help='''You can pass an integer if all hidden layer have same neurons,
                         or you can pass a string with different neurons like:
-                        "1,2,3" same as "1, 2, 3" both are accepted.
+                        "1,2,3".
                         THEY SHOULD BE COMMA SEPARATED VALUES ONLY''')
     parser.add_argument('-a', '--activation', choices=['identity', 'sigmoid', 'tanh', 'ReLU'], default='ReLU')
     return parser.parse_args()
-
-
-args = parse_arguments()
-    
-    # Initialize wandb
-# wandb.init(
-#     project=args.wandb_project, 
-#     entity=args.wandb_entity,
-#     config=vars(args)
-# )
 
 
 def preprocess_input(train, test):
@@ -62,24 +51,39 @@ def preprocess_input(train, test):
 def onehot(x, class_num=10):
     return np.eye(class_num)[x]
 
+
+def plot_confusion_matrix(y_true, y_pred, classes):
+    from sklearn.metrics import confusion_matrix
+    import seaborn as sns
+    
+    cm = confusion_matrix(np.argmax(y_true, axis=1), np.argmax(y_pred, axis=1))
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=classes, yticklabels=classes)
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.title('Confusion Matrix')
+    plt.savefig('confusion_matrix.png')
+    wandb.log({"confusion_matrix": wandb.Image('confusion_matrix.png')})
+
+
+args = parse_arguments()
+
+wandb.init(
+        project=args.wandb_project,
+        entity=args.wandb_entity,
+        config=vars(args)
+    )
+
 # Load and preprocess data
 if args.dataset == 'fashion_mnist':
     from tensorflow.keras.datasets import fashion_mnist #type:ignore
     (X_train, y_train), (X_test, y_test) = fashion_mnist.load_data()
 
-    # Printing Sample images
-    get_sample_images(X_train, y_train)
-
     X_train, X_test = preprocess_input(X_train, X_test)
     y_train, y_test = onehot(y_train), onehot(y_test)
-
-    
 else:
     from tensorflow.keras.datasets import mnist #type:ignore
     (X_train, y_train), (X_test, y_test) = mnist.load_data()
-
-    # Printing Sample images
-    get_sample_images(X_train, y_train)
 
     X_train, X_test = preprocess_input(X_train, X_test)
     y_train, y_test = onehot(y_train), onehot(y_test)
@@ -109,55 +113,90 @@ network = NeuralNetwork(
         activation=args.activation,
         output_features=10, 
         weight_init=args.weight_init
-    )
+)
+
+
+def train(network, X_train, y_train, X_val, y_val, optimizer, epochs=1,
+              batch_size=32, loss_type='cross_entropy', beta=0.5, weight_decay=0, nag=False):
+        
+        if nag:
+            prev_vw = [np.zeros_like(w) for w in network.weights]
+            prev_vb = [np.zeros_like(w) for w in network.biases]
+
+        for epoch in range(epochs):
+            num_batch = 0
+            loss, acc = 0, 0
+            for i in range(0, len(X_train), batch_size):
+                num_batch += 1
+                X_batch = X_train[i:i+batch_size]
+                y_batch = y_train[i:i+batch_size]
+
+                if nag:
+                    for i in range(len(network.weights)):
+                        network.weights[i] -= beta*prev_vw[i]
+                        network.biases[i] -= beta*prev_vb[i]
+                
+                _, active_values = network.feedforward(X_batch)
+
+                loss += network.compute_loss(active_values[-1], y_batch, loss_type, weight_decay)
+
+                acc += network.accuracy(y_batch, active_values[-1])
+
+                weights_grad, biases_grad = network.backProp(X_batch, y_batch, loss_type=loss_type)
+
+                if nag:
+                    network.weights, network.biases, prev_vw, prev_vb = optimizer.do_update(network.weights, network.biases, prev_vw, prev_vb, weights_grad, biases_grad)
+                else:
+                    network.weights, network.biases = optimizer.do_update(network.weights, network.biases, weights_grad, biases_grad)
+            
+
+            _, val_pred = network.feedforward(X_val)
+            val_loss = network.compute_loss(val_pred[-1], y_val, loss_type, weight_decay)
+            val_acc = network.accuracy(y_val, val_pred[-1])
+
+            loss = loss/num_batch
+            acc = acc/num_batch
+
+            wandb.log({
+            'epoch': epoch + 1,
+            'training_loss': loss/batch_size,
+            'training_accuracy': acc/batch_size,
+            'val_loss': val_loss,
+            'val_accuracy': val_acc
+            })
+
 
 # Getting optimizer:
 nag = False
 if str(args.optimizer).lower() == 'sgd':
-    optimizer = SGD(eta=float(args.learning_rate))
+    optimizer = SGD(eta=float(args.learning_rate), weight_decay=float(args.weight_decay))
 elif str(args.optimizer).lower() == 'momentum':
-    optimizer = Momentum(eta=float(args.learning_rate), beta=float(args.momentum))
+    optimizer = Momentum(eta=float(args.learning_rate), beta=float(args.momentum), weight_decay=float(args.weight_decay))
 elif str(args.optimizer).lower() == 'nag':
-    optimizer = NAG(eta=float(args.learning_rate), beta=float(args.momentum))
+    optimizer = NAG(eta=float(args.learning_rate), beta=float(args.momentum), weight_decay=float(args.weight_decay))
     nag = True
 elif str(args.optimizer).lower() == 'rmsprop':
-    optimizer = RMSProp(eta=float(args.learning_rate), beta=float(args.beta), eps=float(args.epsilon))
+    optimizer = RMSProp(eta=float(args.learning_rate), beta=float(args.beta), eps=float(args.epsilon), weight_decay=float(args.weight_decay))
 elif str(args.optimizer).lower() == 'adam':
-    optimizer = adam(eta=float(args.learning_rate), beta1=float(args.beta1), beta2=float(args.beta2), eps=float(args.epsilon))
+    optimizer = Adam(eta=float(args.learning_rate), beta1=float(args.beta1), beta2=float(args.beta2), eps=float(args.epsilon), weight_decay=float(args.weight_decay))
 elif str(args.optimizer).lower() == 'nadam':
-    optimizer = Nadam(eta=float(args.learning_rate), beta1=float(args.beta1), beta2=float(args.beta2), eps=float(args.epsilon))
+    optimizer = Nadam(eta=float(args.learning_rate), beta1=float(args.beta1), beta2=float(args.beta2), eps=float(args.epsilon), weight_decay=float(args.weight_decay))
 else:
     raise NameError(f'Error no optimizer such a {args.optimizer}.\nYou can choose optimizer from [sgd, momentum, nag, rmsprop, adam, nadam].')
 
 
-# Training the model
-training_loss, validation_loss, training_accuracy, validation_accuracy = network.train(
-    X_train=X_train, y_train=y_train, X_val=X_val, y_val=y_val,
+train(
+    network=network, X_train=X_train, y_train=y_train, X_val=X_val, y_val=y_val,
     optimizer=optimizer, loss_type=str(args.loss), epochs=int(args.epochs),
-    batch_size=int(args.batch_size), weight_decay=float(args.weight_decay),
-    nag=nag
+    batch_size=int(args.batch_size), nag=(args.optimizer=='nag')
 )
 
-# Testing the model
-test_accuracy = network.test(X_test, y_test, loss_type=str(args.loss))
+test_accuracy, test_pred = network.test(X_test, y_test)
+
+wandb.log({
+        "test_accuracy": test_accuracy
+    })
 
 
-epochs = np.arange(args.epochs) + 1
-plt.plot(epochs, training_loss, label='training loss')
-plt.plot(epochs, validation_loss, label='val loss')
-plt.legend()
-plt.xlabel('Epochs')
-plt.ylabel('loss')
-plt.title('Loss vs Epochs')
-plt.show()
-
-
-plt.plot(epochs, training_accuracy, label='training accuracy')
-plt.plot(epochs, validation_accuracy, label='training accuracy')
-plt.legend()
-plt.xlabel('Epochs')
-plt.ylabel('Accuracy')
-plt.title('Accuracy vs Epochs')
-plt.show()
-
-print("Test Accuracy:", test_accuracy)
+classes = ["T-shirt/top", "Trouser", "Pullover", "Dress", "Coat", "Sandal", "Shirt", "Sneaker", "Bag", "Ankle boot"]
+plot_confusion_matrix(y_test, test_pred[-1], classes)
