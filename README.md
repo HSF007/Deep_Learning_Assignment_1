@@ -119,7 +119,6 @@ The following optimization algorithms are implemented:
 
 2. **Momentum**
    - SGD with momentum to accelerate convergence
-   - Helps navigate ravines in the loss landscape
 
 3. **Nesterov Accelerated Gradient (NAG)**
    - Improved version of momentum that looks ahead
