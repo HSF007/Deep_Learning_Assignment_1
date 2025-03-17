@@ -1,5 +1,7 @@
 import numpy as np
 
+
+# Code for all optimizers as though in class
 class SGD:
     def __init__(self, eta=0.1, weight_decay=0):
         self.eta = eta

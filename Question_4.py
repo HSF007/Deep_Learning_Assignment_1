@@ -152,16 +152,16 @@ def sweep_train():
     run_name = f"hl_{config.num_layers}_sz_{config.hidden_size}_bs_{config.batch_size}_ac_{config.activation}"
     wandb.run.name = run_name
 
+    # Train and evaluate
     test_accuracy = trainer(config)
     
-    # Train and evaluate
     wandb.log({
         "test_accuracy": test_accuracy
     })
 
 
 if __name__ == "__main__":
-    # Run the sweep
+    # Run the sweep in project DL-Assignment-01
     sweep_id = wandb.sweep(sweep_config, project='DL-Assignment-01')
 
     wandb.agent(sweep_id, sweep_train, count=120)  # Run 120 different configurations

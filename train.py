@@ -2,7 +2,6 @@ import os
 import wandb
 import argparse
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt 
 
 
@@ -11,34 +10,35 @@ from Question_2 import NeuralNetwork
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
-
+# Getting Passed arguments from command
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Deep Learning Assignment-01')
-    parser.add_argument('-wp', '--wandb_project', default='myprojectname')
-    parser.add_argument('-we', '--wandb_entity', default='myname')
-    parser.add_argument('-d', '--dataset', choices=['mnist', 'fashion_mnist'], default='fashion_mnist')
-    parser.add_argument('-e', '--epochs', type=int, default=1,)
-    parser.add_argument('-b', '--batch_size', type=int, default=4)
+    parser.add_argument('-wp', '--wandb_project', type=str, default='myprojectname')
+    parser.add_argument('-we', '--wandb_entity', type=str, default='myname')
+    parser.add_argument('-d', '--dataset', type=str, choices=['mnist', 'fashion_mnist'], default='fashion_mnist')
+    parser.add_argument('-e', '--epochs', type=int, default=10,)
+    parser.add_argument('-b', '--batch_size', type=int, default=64)
     parser.add_argument('-l', '--loss', choices=['mean_squared_error', 'cross_entropy'], default='cross_entropy')
-    parser.add_argument('-o', '--optimizer', choices=['sgd', 'momentum', 'nag', 'rmsprop', 'adam', 'nadam'], default='sgd')
-    parser.add_argument('-lr', '--learning_rate', type=float, default=0.1)
+    parser.add_argument('-o', '--optimizer', choices=['sgd', 'momentum', 'nag', 'rmsprop', 'adam', 'nadam'], default='nadam')
+    parser.add_argument('-lr', '--learning_rate', type=float, default=0.001)
     parser.add_argument('-m', '--momentum', type=float, default=0.5)
     parser.add_argument('-beta', '--beta', type=float, default=0.5)
     parser.add_argument('-beta1', '--beta1', type=float, default=0.5)
     parser.add_argument('-beta2', '--beta2', type=float, default=0.5)
     parser.add_argument('-eps', '--epsilon', type=float, default=1e-6)
     parser.add_argument('-w_d', '--weight_decay', type=float, default=0.0)
-    parser.add_argument('-w_i', '--weight_init', choices=['random', 'Xavier'], default='random')
-    parser.add_argument('-nhl', '--num_layers', type=int, default=1)
-    parser.add_argument('-sz', '--hidden_size', type=str, default=4, 
+    parser.add_argument('-w_i', '--weight_init', choices=['random', 'Xavier'], default='Xavier')
+    parser.add_argument('-nhl', '--num_layers', type=int, default=4)
+    parser.add_argument('-sz', '--hidden_size', type=str, default=128, 
                         help='''You can pass an integer if all hidden layer have same neurons,
                         or you can pass a string with different neurons like:
                         "1,2,3".
                         THEY SHOULD BE COMMA SEPARATED VALUES ONLY''')
-    parser.add_argument('-a', '--activation', choices=['identity', 'sigmoid', 'tanh', 'ReLU'], default='ReLU')
+    parser.add_argument('-a', '--activation', choices=['identity', 'sigmoid', 'tanh', 'ReLU'], default='tanh')
     return parser.parse_args()
 
 
+# Preprocessing input data by normalizing and flattening it
 def preprocess_input(train, test):
     train = train.astype('float32') / 255
     test = test.astype('float32') / 255
@@ -48,10 +48,12 @@ def preprocess_input(train, test):
     return train, test
 
 
+# One hot encoding target features
 def onehot(x, class_num=10):
     return np.eye(class_num)[x]
 
 
+# Plotting confusion matrix and logging into WandB
 def plot_confusion_matrix(y_true, y_pred, classes):
     from sklearn.metrics import confusion_matrix
     import seaborn as sns
@@ -66,6 +68,7 @@ def plot_confusion_matrix(y_true, y_pred, classes):
     wandb.log({"confusion_matrix": wandb.Image('confusion_matrix.png')})
 
 
+# Taking passes arguments and initilizing WandB
 args = parse_arguments()
 
 wandb.init(
@@ -73,6 +76,12 @@ wandb.init(
         entity=args.wandb_entity,
         config=vars(args)
     )
+
+
+# Assening specific name for a WandB run
+run_name = f"hl_{args.num_layers}_sz_{args.hidden_size}_bs_{args.batch_size}_ac_{args.activation}_dataset_{args.dataset}"
+wandb.run.name = run_name
+
 
 # Load and preprocess data
 if args.dataset == 'fashion_mnist':
@@ -89,11 +98,13 @@ else:
     y_train, y_test = onehot(y_train), onehot(y_test)
 
 
+# Splitting data into validation and train
 val_split = int(0.9 * len(X_train))
 X_val, y_val = X_train[val_split:], y_train[val_split:]
 X_train, y_train = X_train[:val_split], y_train[:val_split]
 
 
+# Creating list for hidden layer sizes
 hidden_layers_size = []
 try:
     hidden_layers_size = [int(args.hidden_size)] * args.num_layers
@@ -116,6 +127,7 @@ network = NeuralNetwork(
 )
 
 
+# Training Neural Network
 def train(network, X_train, y_train, X_val, y_val, optimizer, epochs=1,
               batch_size=32, loss_type='cross_entropy', beta=0.5, weight_decay=0, nag=False):
         
@@ -138,7 +150,7 @@ def train(network, X_train, y_train, X_val, y_val, optimizer, epochs=1,
                 
                 _, active_values = network.feedforward(X_batch)
 
-                loss += network.compute_loss(active_values[-1], y_batch, loss_type, weight_decay)
+                loss += network.compute_loss(active_values[-1], y_batch, weight_decay)
 
                 acc += network.accuracy(y_batch, active_values[-1])
 
@@ -151,7 +163,7 @@ def train(network, X_train, y_train, X_val, y_val, optimizer, epochs=1,
             
 
             _, val_pred = network.feedforward(X_val)
-            val_loss = network.compute_loss(val_pred[-1], y_val, loss_type, weight_decay)
+            val_loss = network.compute_loss(val_pred[-1], y_val, weight_decay)
             val_acc = network.accuracy(y_val, val_pred[-1])
 
             loss = loss/num_batch
@@ -185,6 +197,7 @@ else:
     raise NameError(f'Error no optimizer such a {args.optimizer}.\nYou can choose optimizer from [sgd, momentum, nag, rmsprop, adam, nadam].')
 
 
+# Initiate training
 train(
     network=network, X_train=X_train, y_train=y_train, X_val=X_val, y_val=y_val,
     optimizer=optimizer, loss_type=str(args.loss), epochs=int(args.epochs),
@@ -198,5 +211,11 @@ wandb.log({
     })
 
 
-classes = ["T-shirt/top", "Trouser", "Pullover", "Dress", "Coat", "Sandal", "Shirt", "Sneaker", "Bag", "Ankle boot"]
+# Logging Confustion matrix in WandB
+if args.dataset == 'fashion_mnist':
+    classes = ["T-shirt/top", "Trouser", "Pullover", "Dress", "Coat", "Sandal", "Shirt", "Sneaker", "Bag", "Ankle boot"]
+else:
+    classes = [i for i in range(0, 10)]
+
+
 plot_confusion_matrix(y_test, test_pred[-1], classes)
