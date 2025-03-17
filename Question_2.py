@@ -1,6 +1,5 @@
 import numpy as np
 from Question_3 import *
-import wandb
 
 class NeuralNetwork:
     def __init__(self, input_features:int, hidden_layers:list[int], activation:str, output_features:int=10, weight_init:str="random"):
